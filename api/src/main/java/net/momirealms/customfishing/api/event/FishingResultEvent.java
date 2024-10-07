@@ -50,21 +50,11 @@ public class FishingResultEvent extends PlayerEvent implements Cancellable {
      * @param loot The loot involved
      */
     public FishingResultEvent(@NotNull Context<Player> context, Result result, FishHook fishHook, Loot loot) {
-        super(context.getHolder());
+        super(context.holder());
         this.context = context;
         this.result = result;
         this.loot = loot;
         this.fishHook = fishHook;
-    }
-
-    public static HandlerList getHandlerList() {
-        return handlerList;
-    }
-
-    @NotNull
-    @Override
-    public HandlerList getHandlers() {
-        return getHandlerList();
     }
 
     @Override
@@ -131,6 +121,16 @@ public class FishingResultEvent extends PlayerEvent implements Cancellable {
     public int getAmount() {
         if (result == Result.FAILURE) return 0;
         return Optional.ofNullable(context.arg(ContextKeys.AMOUNT)).orElse(1);
+    }
+
+    public static HandlerList getHandlerList() {
+        return handlerList;
+    }
+
+    @NotNull
+    @Override
+    public HandlerList getHandlers() {
+        return getHandlerList();
     }
 
     public enum Result {

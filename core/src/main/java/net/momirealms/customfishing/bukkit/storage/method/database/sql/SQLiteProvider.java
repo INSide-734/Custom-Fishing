@@ -36,6 +36,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -44,7 +45,7 @@ public class SQLiteProvider extends AbstractSQLDatabase {
     private Connection connection;
     private File databaseFile;
     private Constructor<?> connectionConstructor;
-    ExecutorService executor;
+    private ExecutorService executor;
 
     public SQLiteProvider(BukkitCustomFishingPlugin plugin) {
         super(plugin);
@@ -113,8 +114,9 @@ public class SQLiteProvider extends AbstractSQLDatabase {
 
     @SuppressWarnings("DuplicatedCode")
     @Override
-    public CompletableFuture<Optional<PlayerData>> getPlayerData(UUID uuid, boolean lock) {
+    public CompletableFuture<Optional<PlayerData>> getPlayerData(UUID uuid, boolean lock, Executor executor) {
         var future = new CompletableFuture<Optional<PlayerData>>();
+        if (executor == null) executor = this.executor;
         executor.execute(() -> {
         try (
             Connection connection = getConnection();
@@ -127,7 +129,7 @@ public class SQLiteProvider extends AbstractSQLDatabase {
                 PlayerData data = plugin.getStorageManager().fromBytes(dataByteArray);
                 data.uuid(uuid);
                 int lockValue = rs.getInt(2);
-                if (lockValue != 0 && getCurrentSeconds() - ConfigManager.dataSaveInterval() <= lockValue) {
+                if (lockValue != 0 && getCurrentSeconds() - 30 <= lockValue) {
                     connection.close();
                     data.locked(true);
                     future.complete(Optional.of(data));

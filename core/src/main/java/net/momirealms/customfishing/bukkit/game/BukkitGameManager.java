@@ -27,6 +27,7 @@ import net.momirealms.customfishing.api.mechanic.context.ContextKeys;
 import net.momirealms.customfishing.api.mechanic.effect.Effect;
 import net.momirealms.customfishing.api.mechanic.fishing.CustomFishingHook;
 import net.momirealms.customfishing.api.mechanic.game.*;
+import net.momirealms.customfishing.api.mechanic.misc.value.MathValue;
 import net.momirealms.customfishing.api.mechanic.misc.value.TextValue;
 import net.momirealms.customfishing.api.mechanic.requirement.ConditionalElement;
 import net.momirealms.customfishing.api.mechanic.requirement.RequirementManager;
@@ -71,7 +72,7 @@ public class BukkitGameManager implements GameManager {
         this.loadExpansions();
         File file = new File(plugin.getDataFolder(), "game-conditions.yml");
         if (!file.exists()) {
-            plugin.getBoostrap().saveResource("game-conditions.yml", false);
+            plugin.getBootstrap().saveResource("game-conditions.yml", false);
         }
         YamlDocument lootConditionsConfig = plugin.getConfigManager().loadData(file);
         for (Map.Entry<String, Object> entry : lootConditionsConfig.getStringRouteMappedValues(false).entrySet()) {
@@ -166,22 +167,10 @@ public class BukkitGameManager implements GameManager {
     }
 
     private GameBasics getGameBasics(Section section) {
-        GameBasics.Builder builder = GameBasics.builder();
-        Object difficulty = section.get("difficulty", "20~80");
-        if (difficulty instanceof String str) {
-            String[] split = str.split("~");
-            builder.difficulty(Integer.parseInt(split[0]), Integer.parseInt(split[1]));
-        } else if (difficulty instanceof Integer integer) {
-            builder.difficulty(integer);
-        }
-        Object time = section.get("time", 15);
-        if (time instanceof String str) {
-            String[] split = str.split("~");
-            builder.time(Integer.parseInt(split[0]), Integer.parseInt(split[1]));
-        } else if (time instanceof Integer integer) {
-            builder.time(integer);
-        }
-        return builder.build();
+        return GameBasics.builder()
+                .difficulty(MathValue.auto(section.get("difficulty", "20~80"), false))
+                .time(MathValue.auto(section.get("time", 15), false))
+                .build();
     }
 
     private void registerHoldGame() {
@@ -205,6 +194,8 @@ public class BukkitGameManager implements GameManager {
                 private final String font = section.getString("subtitle.font");
                 private final String barImage = section.getString("subtitle.bar");
                 private final String tip = section.getString("tip");
+                private final boolean elasticity = section.getBoolean("arguments.elasticity", false);
+                private final double elasticityPower = section.getDouble("arguments.elasticity-power", 0.7);
 
                 @Override
                 public BiFunction<CustomFishingHook, GameSetting, AbstractGamingPlayer> gamingPlayerProvider() {
@@ -257,9 +248,9 @@ public class BukkitGameManager implements GameManager {
 
                         private void burst() {
                             if (Math.random() < (judgement_position / barEffectiveWidth)) {
-                                judgement_velocity = -1 - 0.8 * Math.random() * ((double) settings.difficulty() / 15);
+                                judgement_velocity = -1 - 0.8 * Math.random() * (settings.difficulty() / 15);
                             } else {
-                                judgement_velocity = 1 + 0.8 * Math.random() * ((double) settings.difficulty() / 15);
+                                judgement_velocity = 1 + 0.8 * Math.random() * (settings.difficulty() / 15);
                             }
                         }
 
@@ -285,11 +276,19 @@ public class BukkitGameManager implements GameManager {
                         private void calibrate() {
                             if (fish_position < 0) {
                                 fish_position = 0;
-                                fish_velocity = 0;
+                                if (elasticity) {
+                                    fish_velocity = -fish_velocity * elasticityPower;
+                                } else {
+                                    fish_velocity = 0;
+                                }
                             }
                             if (fish_position + pointerIconWidth > barEffectiveWidth) {
                                 fish_position = barEffectiveWidth - pointerIconWidth;
-                                fish_velocity = 0;
+                                if (elasticity) {
+                                    fish_velocity = -fish_velocity * elasticityPower;
+                                } else {
+                                    fish_velocity = 0;
+                                }
                             }
                             if (judgement_position < 0) {
                                 judgement_position = 0;
@@ -340,6 +339,8 @@ public class BukkitGameManager implements GameManager {
                 private final String barImage = section.getString("subtitle.bar");
                 private final String tip = section.getString("tip");
                 private final boolean left = section.getBoolean("left-click", false);
+                private final boolean elasticity = section.getBoolean("arguments.elasticity", false);
+                private final double elasticityPower = section.getDouble("arguments.elasticity-power", 0.7);
 
                 @Override
                 public BiFunction<CustomFishingHook, GameSetting, AbstractGamingPlayer> gamingPlayerProvider() {
@@ -412,11 +413,19 @@ public class BukkitGameManager implements GameManager {
                         private void calibrate() {
                             if (fish_position < 0) {
                                 fish_position = 0;
-                                fish_velocity = 0;
+                                if (elasticity) {
+                                    fish_velocity = -fish_velocity * elasticityPower;
+                                } else {
+                                    fish_velocity = 0;
+                                }
                             }
                             if (fish_position + pointerIconWidth > barEffectiveWidth) {
                                 fish_position = barEffectiveWidth - pointerIconWidth;
-                                fish_velocity = 0;
+                                if (elasticity) {
+                                    fish_velocity = -fish_velocity * elasticityPower;
+                                } else {
+                                    fish_velocity = 0;
+                                }
                             }
                             if (judgement_position < 0) {
                                 judgement_position = 0;
@@ -437,7 +446,6 @@ public class BukkitGameManager implements GameManager {
                             }
                             played = true;
                             fish_velocity = pullingStrength;
-                            return;
                         }
 
                         @Override
@@ -473,12 +481,13 @@ public class BukkitGameManager implements GameManager {
 
                 private final TextValue<Player> title = TextValue.auto(section.getString("title","<red>{progress}"));
                 private final TextValue<Player> subtitle = TextValue.auto(section.getString("subtitle", "<gray>Click <white>{clicks} <gray>times to win. Time left <white>{time_left}s"));
+                private final boolean left = section.getBoolean("left-click", false);
 
                 @Override
                 public BiFunction<CustomFishingHook, GameSetting, AbstractGamingPlayer> gamingPlayerProvider() {
                     return (customFishingHook, gameSetting) -> new AbstractGamingPlayer(customFishingHook, gameSetting) {
                         private int clickedTimes;
-                        private final int requiredTimes = settings.difficulty();
+                        private final int requiredTimes = (int) settings.difficulty();
 
                         @Override
                         public void arrangeTask() {
@@ -493,12 +502,16 @@ public class BukkitGameManager implements GameManager {
 
                         @Override
                         public void handleRightClick() {
-                            handleClicks();
+                            if (!left) {
+                                handleClicks();
+                            }
                         }
 
                         @Override
-                        public boolean internalLeftClick() {
-                            handleClicks();
+                        public boolean handleLeftClick() {
+                            if (left) {
+                                handleClicks();
+                            }
                             return true;
                         }
 
@@ -513,8 +526,13 @@ public class BukkitGameManager implements GameManager {
 
                         private void showUI() {
                             hook.getContext().arg(ContextKeys.CLICKS_LEFT, requiredTimes - clickedTimes);
+                            hook.getContext().arg(ContextKeys.REQUIRED_TIMES, requiredTimes);
                             hook.getContext().arg(ContextKeys.PROGRESS, String.valueOf(clickedTimes));
-                            SparrowHeart.getInstance().sendTitle(getPlayer(), AdventureHelper.miniMessageToJson(title.render(hook.getContext())), AdventureHelper.miniMessageToJson(subtitle.render(hook.getContext())), 0, 20, 0);
+                            SparrowHeart.getInstance().sendTitle(
+                                    getPlayer(),
+                                    AdventureHelper.miniMessageToJson(title.render(hook.getContext())),
+                                    AdventureHelper.miniMessageToJson(subtitle.render(hook.getContext())),
+                                    0, 20, 0);
                         }
                     };
                 }
@@ -561,7 +579,7 @@ public class BukkitGameManager implements GameManager {
                         @Override
                         protected void tick() {
                             if (struggling_time <= 0) {
-                                if (Math.random() < ((double) settings.difficulty() / 4000)) {
+                                if (Math.random() < (settings.difficulty() / 4000)) {
                                     struggling_time = (int) (10 + Math.random() * (settings.difficulty() / 4));
                                 }
                             } else {
@@ -585,7 +603,7 @@ public class BukkitGameManager implements GameManager {
                         private void pull() {
                             played = true;
                             if (struggling_time > 0) {
-                                strain += (strugglingIncrease + ((double) settings.difficulty() / 50));
+                                strain += (strugglingIncrease + (settings.difficulty() / 50));
                                 fish_position -= 1;
                             } else {
                                 strain += normalIncrease;
@@ -652,7 +670,7 @@ public class BukkitGameManager implements GameManager {
 
                         @Override
                         public void arrangeTask() {
-                            requiredTimes = settings.difficulty() / 4;
+                            requiredTimes = (int) (settings.difficulty() / 4) + 3;
                             order = new int[requiredTimes];
                             for (int i = 0; i < requiredTimes; i++) {
                                 order[i] = ThreadLocalRandom.current().nextInt(0, easy ? 2 : 4);
@@ -817,6 +835,8 @@ public class BukkitGameManager implements GameManager {
                 private final int totalWidth = chances.size() * widthPerSection - 1;
                 private final int pointerOffset = section.getInt("arguments.pointer-offset");
                 private final int pointerWidth = section.getInt("arguments.pointer-width");
+                private final int maxSpeed = section.getInt("arguments.max-speed", 150);
+                private final int minSpeed = section.getInt("arguments.min-speed", 15);
                 private final List<String> title = ListUtils.toList(section.get("title"));
                 private final String font = section.getString("subtitle.font");
                 private final String barImage = section.getString("subtitle.bar");
@@ -830,10 +850,18 @@ public class BukkitGameManager implements GameManager {
                         private boolean face = true;
                         private final TextValue<Player> sendTitle = TextValue.auto(title.get(RandomUtils.generateRandomInt(0, title.size() - 1)));
 
+                        private static final int MIN_VALUE = 1;
+                        private static final int MAX_VALUE = 100;
+
+                        private long mapValueToIntervalMicroseconds(int value) {
+                            double frequency = minSpeed + ((double) (value - MIN_VALUE) / (MAX_VALUE - MIN_VALUE)) * (maxSpeed - minSpeed);
+                            return (long) (1_000_000 / frequency);
+                        }
+
                         @Override
                         public void arrangeTask() {
-                            var period = Math.min(200, ((double) 10*(200-settings.difficulty()))/((double) (1+4*settings.difficulty())));
-                            this.task = plugin.getScheduler().asyncRepeating(this, 10, (long) 10, TimeUnit.MILLISECONDS);
+                            long period = mapValueToIntervalMicroseconds((int) settings.difficulty());
+                            this.task = plugin.getScheduler().asyncRepeating(this, period, period, TimeUnit.MICROSECONDS);
                         }
 
                         @Override
@@ -968,20 +996,30 @@ public class BukkitGameManager implements GameManager {
                 private final int judgementAreaOffset = section.getInt("arguments.judgment-area-offset");
                 private final int pointerIconWidth = section.getInt("arguments.pointer-icon-width");
                 private final int pointerOffset = section.getInt("arguments.pointer-offset");
+                private final int maxSpeed = section.getInt("arguments.max-speed", 150);
+                private final int minSpeed = section.getInt("arguments.min-speed", 15);
 
                 @Override
                 public BiFunction<CustomFishingHook, GameSetting, AbstractGamingPlayer> gamingPlayerProvider() {
                     return (customFishingHook, gameSetting) -> new AbstractGamingPlayer(customFishingHook, gameSetting) {
+
+                        private static final int MIN_VALUE = 1;
+                        private static final int MAX_VALUE = 100;
 
                         private int progress = -1;
                         private boolean face = true;
                         private final int judgement_position = RandomUtils.generateRandomInt(0, barEffectiveWidth - judgementAreaWidth);
                         private final TextValue<Player> title = TextValue.auto(titles.get(RandomUtils.generateRandomInt(0, titles.size() - 1)));
 
+                        private long mapValueToIntervalMicroseconds(int value) {
+                            double frequency = minSpeed + ((double) (value - MIN_VALUE) / (MAX_VALUE - MIN_VALUE)) * (maxSpeed - minSpeed);
+                            return (long) (1_000_000 / frequency);
+                        }
+
                         @Override
                         public void arrangeTask() {
-                            var period = ((double) 10*(200-settings.difficulty()))/((double) (1+4*settings.difficulty()));
-                            this.task = plugin.getScheduler().asyncRepeating(this, 50, (long) period, TimeUnit.MILLISECONDS);
+                            long period = mapValueToIntervalMicroseconds((int) settings.difficulty());
+                            this.task = plugin.getScheduler().asyncRepeating(this, period, period, TimeUnit.MICROSECONDS);
                         }
 
                         @Override

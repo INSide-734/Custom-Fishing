@@ -24,8 +24,11 @@ import net.momirealms.customfishing.api.mechanic.context.Context;
 import net.momirealms.customfishing.api.mechanic.context.ContextKeys;
 import net.momirealms.customfishing.api.mechanic.effect.Effect;
 import net.momirealms.customfishing.api.mechanic.effect.EffectProperties;
+import net.momirealms.customfishing.api.mechanic.fishing.AntiAutoFishing;
 import net.momirealms.customfishing.api.util.EventUtils;
+import net.momirealms.customfishing.common.helper.VersionHelper;
 import net.momirealms.customfishing.common.plugin.scheduler.SchedulerTask;
+import net.momirealms.customfishing.common.util.RandomUtils;
 import net.momirealms.sparrow.heart.SparrowHeart;
 import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Player;
@@ -39,6 +42,7 @@ public class VanillaMechanic implements HookMechanic {
     private SchedulerTask task;
     private boolean isHooked = false;
     private int tempWaitTime;
+    private boolean freeze = false;
 
     public VanillaMechanic(FishHook hook, Context<Player> context) {
         this.hook = hook;
@@ -62,7 +66,7 @@ public class VanillaMechanic implements HookMechanic {
 
     @Override
     public void start(Effect finalEffect) {
-        EventUtils.fireAndForget(new FishingHookStateEvent(context.getHolder(), hook, FishingHookStateEvent.State.LAND));
+        EventUtils.fireAndForget(new FishingHookStateEvent(context.holder(), hook, FishingHookStateEvent.State.LAND));
         setWaitTime(hook, finalEffect);
         this.task = BukkitCustomFishingPlugin.getInstance().getScheduler().sync().runRepeating(() -> {
             if (isHooked) {
@@ -79,19 +83,38 @@ public class VanillaMechanic implements HookMechanic {
     }
 
     private void setWaitTime(FishHook hook, Effect effect) {
-        BukkitCustomFishingPlugin.getInstance().getScheduler().sync().runLater(() -> {
+        BukkitCustomFishingPlugin.getInstance().getScheduler().sync().run(() -> {
+            if (freeze) {
+                SparrowHeart.getInstance().setWaitTime(hook, Integer.MAX_VALUE);
+                return;
+            }
             if (!ConfigManager.overrideVanillaWaitTime()) {
-                int before = Math.max(hook.getWaitTime(), 0);
+                int before = Math.max(SparrowHeart.getInstance().getWaitTime(hook), 0);
                 int after = (int) Math.max(100, before * effect.waitTimeMultiplier() + effect.waitTimeAdder());
                 BukkitCustomFishingPlugin.getInstance().debug("Wait time: " + before + " -> " + after + " ticks");
-                hook.setWaitTime(after);
+                SparrowHeart.getInstance().setWaitTime(hook, after);
             } else {
                 int before = ThreadLocalRandom.current().nextInt(ConfigManager.waterMaxTime() - ConfigManager.waterMinTime() + 1) + ConfigManager.waterMinTime();
                 int after = Math.max(ConfigManager.waterMinTime(), (int) (before * effect.waitTimeMultiplier() + effect.waitTimeAdder()));
-                hook.setWaitTime(after);
+                SparrowHeart.getInstance().setWaitTime(hook, after);
                 BukkitCustomFishingPlugin.getInstance().debug("Wait time: " + before + " -> " + after + " ticks");
             }
-        }, 1, hook.getLocation());
+            int lureTime = RandomUtils.generateRandomInt(20, 80);
+            if (VersionHelper.isVersionNewerThan1_19_4()) {
+                hook.setLureTime(lureTime, lureTime);
+            } else {
+                // the lowest value
+                lureTime = 20;
+            }
+            if (ConfigManager.antiAutoFishingMod()) {
+                BukkitCustomFishingPlugin.getInstance().getScheduler().sync().runLater(() -> {
+                    Player player = context.holder();
+                    if (player.isOnline() && hook.isValid()) {
+                        AntiAutoFishing.prevent(player, hook);
+                    }
+                },  RandomUtils.generateRandomInt(20, SparrowHeart.getInstance().getWaitTime(hook) + lureTime - 5), hook.getLocation());
+            }
+        }, hook.getLocation());
     }
 
     @Override
@@ -107,16 +130,19 @@ public class VanillaMechanic implements HookMechanic {
 
     @Override
     public void freeze() {
-        if (hook.getWaitTime() > 0) {
-            this.tempWaitTime = hook.getWaitTime();
+        freeze = true;
+        int waitTime = SparrowHeart.getInstance().getWaitTime(hook);
+        if (waitTime > 0) {
+            this.tempWaitTime = waitTime;
         }
-        hook.setWaitTime(Integer.MAX_VALUE);
+        SparrowHeart.getInstance().setWaitTime(hook, Integer.MAX_VALUE);
     }
 
     @Override
     public void unfreeze(Effect effect) {
+        freeze = false;
         if (this.tempWaitTime != 0) {
-            hook.setWaitTime(this.tempWaitTime);
+            SparrowHeart.getInstance().setWaitTime(hook, tempWaitTime);
             this.tempWaitTime = 0;
         } else {
             setWaitTime(hook, effect);
@@ -124,10 +150,10 @@ public class VanillaMechanic implements HookMechanic {
     }
 
     public void onBite() {
-        EventUtils.fireAndForget(new FishingHookStateEvent(context.getHolder(), hook, FishingHookStateEvent.State.BITE));
+        EventUtils.fireAndForget(new FishingHookStateEvent(context.holder(), hook, FishingHookStateEvent.State.BITE));
     }
 
     public void onFailedAttempt() {
-        EventUtils.fireAndForget(new FishingHookStateEvent(context.getHolder(), hook, FishingHookStateEvent.State.ESCAPE));
+        EventUtils.fireAndForget(new FishingHookStateEvent(context.holder(), hook, FishingHookStateEvent.State.ESCAPE));
     }
 }

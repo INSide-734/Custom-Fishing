@@ -5,14 +5,13 @@
 <a href="https://mo-mi.gitbook.io/xiaomomi-plugins/plugin-wiki/customfishing" alt="GitBook">
 <img src="https://img.shields.io/badge/docs-gitbook-brightgreen" alt="Gitbook"/>
 </a>
-![GitHub](https://img.shields.io/github/license/Xiao-MoMi/Custom-Fishing)
+[![Scc Count Badge](https://sloc.xyz/github/Xiao-MoMi/Custom-Fishing/?category=codes)](https://github.com/Xiao-MoMi/Custom-Fishing/)
 ![Code Size](https://img.shields.io/github/languages/code-size/Xiao-MoMi/Custom-Fishing)
 ![bStats Servers](https://img.shields.io/bstats/servers/16648)
 ![bStats Players](https://img.shields.io/bstats/players/16648)
+![GitHub](https://img.shields.io/github/license/Xiao-MoMi/Custom-Fishing)
 
-CustomFishing is a Paper plugin that provides minigames and a powerful condition & action system for fishing.
-With the new concept of weight system, CustomFishing brings unlimited customization possibilities and best performance.
-
+CustomFishing is a Paper plugin designed to offer an extensive range of minigames and a robust condition and action system for fishing. Introducing a novel weight system concept, CustomFishing provides unparalleled customization opportunities while ensuring optimal performance. The plugin goes beyond standard features by allowing you to register custom mechanism, actions, conditions, games, and even parsers for configuration file formats. This flexibility makes it a powerful API for developers, enabling the creation of innovative fishing experiences, such as lava fishing or void fishing, tailored to your specific needs.
 ## How to build
 
 #### Command Line
@@ -27,13 +26,13 @@ Get the artifact under /target folder
 ## Support the developer
 
 Polymart: https://polymart.org/resource/customfishing.2723 \
-Afdian: https://afdian.net/@xiaomomi
+Afdian: https://afdian.com/@xiaomomi
 
 ## CustomFishing API
 
 ### Maven
 
-```
+```html
 <repositories>
   <repository>
     <id>jitpack</id>
@@ -41,7 +40,7 @@ Afdian: https://afdian.net/@xiaomomi
   </repository>
 </repositories>
 ```
-```
+```html
 <dependencies>
   <dependency>
     <groupId>com.github.Xiao-MoMi</groupId>
@@ -53,25 +52,27 @@ Afdian: https://afdian.net/@xiaomomi
 ```
 ### Gradle (Groovy)
 
-```
+```groovy
 repositories {
     maven { url 'https://jitpack.io' }
 }
 ```
-```
+```groovy
 dependencies {
     compileOnly 'com.github.Xiao-MoMi:Custom-Fishing:{VERSION}'
 }
 ```
 ### Gradle (Kotlin)
 
-```
+```kotlin
 repositories {
     maven("https://jitpack.io/")
 }
 ```
-```
+```kotlin
 dependencies {
     compileOnly("com.github.Xiao-MoMi:Custom-Fishing:{VERSION}")
 }
 ```
+#### Fun facts
+I misspelled mechanism as mechanic. I should have realized this earlier XD

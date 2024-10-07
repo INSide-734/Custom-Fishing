@@ -91,7 +91,12 @@ public interface Context<T> {
      *
      * @return the holder object of type T.
      */
-    T getHolder();
+    T holder();
+
+    /**
+     * Reset the custom data
+     */
+    void clearCustomData();
 
     /**
      * Creates a player-specific context.

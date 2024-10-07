@@ -17,6 +17,7 @@
 
 package net.momirealms.customfishing.api.mechanic.game;
 
+import net.momirealms.customfishing.api.BukkitCustomFishingPlugin;
 import net.momirealms.customfishing.api.mechanic.effect.Effect;
 import net.momirealms.customfishing.api.mechanic.fishing.CustomFishingHook;
 
@@ -60,7 +61,8 @@ public abstract class AbstractGame implements Game {
      */
     @Override
     public GamingPlayer start(CustomFishingHook hook, Effect effect) {
-        return gamingPlayerProvider().apply(hook, basics.toGameSetting(effect));
+        BukkitCustomFishingPlugin.getInstance().debug(effect);
+        return gamingPlayerProvider().apply(hook, basics.toGameSetting(hook.getContext(), effect));
     }
 
     /**

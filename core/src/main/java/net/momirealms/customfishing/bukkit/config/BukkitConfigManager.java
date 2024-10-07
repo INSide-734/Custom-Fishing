@@ -32,6 +32,7 @@ import dev.dejvokep.boostedyaml.utils.format.NodeRole;
 import net.momirealms.customfishing.api.BukkitCustomFishingPlugin;
 import net.momirealms.customfishing.api.mechanic.MechanicType;
 import net.momirealms.customfishing.api.mechanic.action.Action;
+import net.momirealms.customfishing.api.mechanic.action.ActionManager;
 import net.momirealms.customfishing.api.mechanic.action.ActionTrigger;
 import net.momirealms.customfishing.api.mechanic.block.BlockDataModifier;
 import net.momirealms.customfishing.api.mechanic.block.BlockDataModifierFactory;
@@ -67,12 +68,13 @@ import net.momirealms.customfishing.bukkit.totem.particle.ParticleSetting;
 import net.momirealms.customfishing.bukkit.util.ItemStackUtils;
 import net.momirealms.customfishing.bukkit.util.ParticleUtils;
 import net.momirealms.customfishing.common.config.node.Node;
-import net.momirealms.customfishing.common.dependency.DependencyProperties;
 import net.momirealms.customfishing.common.helper.AdventureHelper;
+import net.momirealms.customfishing.common.helper.ExpressionHelper;
 import net.momirealms.customfishing.common.helper.VersionHelper;
 import net.momirealms.customfishing.common.item.AbstractItem;
 import net.momirealms.customfishing.common.item.Item;
 import net.momirealms.customfishing.common.locale.TranslationManager;
+import net.momirealms.customfishing.common.plugin.CustomFishingProperties;
 import net.momirealms.customfishing.common.util.*;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
@@ -116,7 +118,7 @@ public class BukkitConfigManager extends ConfigManager {
 
     @Override
     public void load() {
-        String configVersion = DependencyProperties.getDependencyVersion("config");
+        String configVersion = CustomFishingProperties.getValue("config");
         try (InputStream inputStream = new FileInputStream(resolveConfig("config.yml").toFile())) {
             MAIN_CONFIG = YamlDocument.create(
                     inputStream,
@@ -218,6 +220,8 @@ public class BukkitConfigManager extends ConfigManager {
 
         eventPriority = EventPriority.valueOf(config.getString("other-settings.event-priority", "NORMAL").toUpperCase(Locale.ENGLISH));
 
+        antiAutoFishingMod = config.getBoolean("other-settings.anti-auto-fishing-mod", false);
+
         mechanicRequirements = plugin.getRequirementManager().parseRequirements(config.getSection("mechanics.mechanic-requirements"), true);
         skipGameRequirements = plugin.getRequirementManager().parseRequirements(config.getSection("mechanics.skip-game-requirements"), true);
         autoFishingRequirements = plugin.getRequirementManager().parseRequirements(config.getSection("mechanics.auto-fishing-requirements"), true);
@@ -271,7 +275,7 @@ public class BukkitConfigManager extends ConfigManager {
             File typeFolder = new File(plugin.getDataFolder(), "contents" + File.separator + type.path());
             if (!typeFolder.exists()) {
                 if (!typeFolder.mkdirs()) return;
-                plugin.getBoostrap().saveResource("contents" + File.separator + type.path() + File.separator + "default.yml", false);
+                plugin.getBootstrap().saveResource("contents" + File.separator + type.path() + File.separator + "default.yml", false);
             }
             Map<String, Node<ConfigParserFunction>> nodes = type.parser();
             fileDeque.push(typeFolder);
@@ -330,6 +334,7 @@ public class BukkitConfigManager extends ConfigManager {
         return Pair.of(Key.of(split[0], split[1]), Short.parseShort(split[2]));
     }
 
+    @SuppressWarnings("unchecked")
     private void registerBuiltInItemProperties() {
         Function<Object, BiConsumer<Item<ItemStack>, Context<Player>>> f1 = arg -> {
             Section section = (Section) arg;
@@ -477,11 +482,24 @@ public class BukkitConfigManager extends ConfigManager {
             String sizePair = (String) arg;
             String[] split = sizePair.split("~", 2);
             MathValue<Player> min = MathValue.auto(split[0]);
-            MathValue<Player> max = MathValue.auto(split[1]);
+            MathValue<Player> max = split.length == 2 ? MathValue.auto(split[1]) : MathValue.auto(split[0]);
             return (item, context) -> {
                 double minSize = min.evaluate(context);
                 double maxSize = max.evaluate(context);
                 float size = (float) RandomUtils.generateRandomDouble(minSize, maxSize);
+                Double sm = context.arg(ContextKeys.SIZE_MULTIPLIER);
+                if (sm == null) sm = 1.0;
+                Double sa = context.arg(ContextKeys.SIZE_ADDER);
+                if (sa == null) sa = 0.0;
+                size = (float) (sm * size + sa);
+                if (restrictedSizeRange()) {
+                    if (size > maxSize) {
+                        size = (float) maxSize;
+                    }
+                    if (size < minSize) {
+                        size = (float) minSize;
+                    }
+                }
                 item.setTag(size, "CustomFishing", "size");
                 context.arg(ContextKeys.SIZE, size);
                 context.arg(ContextKeys.MIN_SIZE, minSize);
@@ -495,9 +513,17 @@ public class BukkitConfigManager extends ConfigManager {
             MathValue<Player> bonus = MathValue.auto(section.get("bonus", "0"));
             return (item, context) -> {
                 double basePrice = base.evaluate(context);
+                context.arg(ContextKeys.BASE, basePrice);
                 double bonusPrice = bonus.evaluate(context);
-                float size = Optional.ofNullable(context.arg(ContextKeys.SIZE)).orElse(0f);
-                double price = basePrice + bonusPrice * size;
+                context.arg(ContextKeys.BONUS, bonusPrice);
+                String formula = plugin.getMarketManager().getFormula();
+                TextValue<Player> playerTextValue = TextValue.auto(formula);
+                String rendered = playerTextValue.render(context);
+                List<String> unparsed = plugin.getPlaceholderManager().resolvePlaceholders(rendered);
+                for (String unparsedValue : unparsed) {
+                    rendered = rendered.replace(unparsedValue, "0");
+                }
+                double price = ExpressionHelper.evaluate(rendered);
                 item.setTag(price, "Price");
                 context.arg(ContextKeys.PRICE, price);
                 context.arg(ContextKeys.PRICE_FORMATTED, String.format("%.2f", price));
@@ -568,109 +594,161 @@ public class BukkitConfigManager extends ConfigManager {
         }, "effects");
     }
 
-    private TriConsumer<Effect, Context<Player>, Integer> parseEffect(Section section) {
+    public TriConsumer<Effect, Context<Player>, Integer> parseEffect(Section section) {
         if (!section.contains("type")) {
             throw new RuntimeException(section.getRouteAsString());
         }
+        Action<Player>[] actions = plugin.getActionManager().parseActions(section.getSection("actions"));
         switch (section.getString("type")) {
             case "lava-fishing" -> {
                 return (((effect, context, phase) -> {
-                    if (phase == 0) effect.properties().put(EffectProperties.LAVA_FISHING, true);
+                    if (phase == 0) {
+                        effect.properties().put(EffectProperties.LAVA_FISHING, true);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "void-fishing" -> {
                 return (((effect, context, phase) -> {
-                    if (phase == 0) effect.properties().put(EffectProperties.VOID_FISHING, true);
+                    if (phase == 0) {
+                        effect.properties().put(EffectProperties.VOID_FISHING, true);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "weight-mod" -> {
                 var op = parseWeightOperation(section.getStringList("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 1) effect.weightOperations(op);
+                    if (phase == 1) {
+                        effect.weightOperations(op);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "weight-mod-ignore-conditions" -> {
                 var op = parseWeightOperation(section.getStringList("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 1) effect.weightOperationsIgnored(op);
+                    if (phase == 1) {
+                        effect.weightOperationsIgnored(op);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "group-mod" -> {
                 var op = parseGroupWeightOperation(section.getStringList("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 1) effect.weightOperations(op);
+                    if (phase == 1) {
+                        effect.weightOperations(op);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "group-mod-ignore-conditions" -> {
                 var op = parseGroupWeightOperation(section.getStringList("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 1) effect.weightOperationsIgnored(op);
+                    if (phase == 1) {
+                        effect.weightOperationsIgnored(op);
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "wait-time" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.waitTimeAdder(effect.waitTimeAdder() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.waitTimeAdder(effect.waitTimeAdder() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "hook-time", "wait-time-multiplier" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.waitTimeMultiplier(effect.waitTimeMultiplier() - 1 + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.waitTimeMultiplier(effect.waitTimeMultiplier() - 1 + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "difficulty" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.difficultyAdder(effect.difficultyAdder() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.difficultyAdder(effect.difficultyAdder() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "difficulty-multiplier", "difficulty-bonus" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.difficultyMultiplier(effect.difficultyMultiplier() - 1 + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.difficultyMultiplier(effect.difficultyMultiplier() - 1 + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "size" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.sizeAdder(effect.sizeAdder() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.sizeAdder(effect.sizeAdder() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "size-multiplier", "size-bonus" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.sizeMultiplier(effect.sizeMultiplier() - 1 + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.sizeMultiplier(effect.sizeMultiplier() - 1 + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "game-time" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.gameTimeAdder(effect.gameTimeAdder() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.gameTimeAdder(effect.gameTimeAdder() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "game-time-multiplier", "game-time-bonus" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.gameTimeMultiplier(effect.gameTimeMultiplier() - 1 + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.gameTimeMultiplier(effect.gameTimeMultiplier() - 1 + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "score" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.scoreAdder(effect.scoreAdder() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.scoreAdder(effect.scoreAdder() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "score-multiplier", "score-bonus" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.scoreMultiplier(effect.scoreMultiplier() - 1 + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.scoreMultiplier(effect.scoreMultiplier() - 1 + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "multiple-loot" -> {
                 MathValue<Player> value = MathValue.auto(section.get("value"));
                 return (((effect, context, phase) -> {
-                    if (phase == 2) effect.multipleLootChance(effect.multipleLootChance() + value.evaluate(context));
+                    if (phase == 2) {
+                        effect.multipleLootChance(effect.multipleLootChance() + value.evaluate(context));
+                        ActionManager.trigger(context, actions);
+                    }
                 }));
             }
             case "conditional" -> {
@@ -946,6 +1024,27 @@ public class BukkitConfigManager extends ConfigManager {
 
     private void registerBuiltInLootParser() {
         this.registerLootParser(object -> {
+            Section section = (Section) object;
+            Map<String, TextValue<Player>> data = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : section.getStringRouteMappedValues(false).entrySet()) {
+                if (entry.getValue() instanceof String str) {
+                    data.put(entry.getKey(), TextValue.auto(str));
+                } else {
+                    data.put(entry.getKey(), TextValue.auto(entry.getValue().toString()));
+                }
+            }
+            return builder -> {
+                builder.customData(data);
+            };
+        }, "custom-data");
+        this.registerLootParser(object -> {
+            if (object instanceof Boolean b) {
+                return builder -> builder.toInventory(MathValue.plain(b ? 1 : 0));
+            } else {
+                return builder -> builder.toInventory(MathValue.auto(object));
+            }
+        }, "to-inventory");
+        this.registerLootParser(object -> {
             boolean value = (boolean) object;
             return builder -> builder.preventGrabbing(value);
         }, "prevent-grabbing");
@@ -990,7 +1089,7 @@ public class BukkitConfigManager extends ConfigManager {
     @Override
     public void saveResource(String filePath) {
         if (!new File(plugin.getDataFolder(), filePath).exists()) {
-            plugin.getBoostrap().saveResource(filePath, false);
+            plugin.getBootstrap().saveResource(filePath, false);
         }
     }
 

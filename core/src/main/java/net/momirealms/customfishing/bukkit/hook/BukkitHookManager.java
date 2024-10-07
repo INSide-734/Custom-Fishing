@@ -30,10 +30,10 @@ import net.momirealms.customfishing.api.mechanic.effect.EffectModifier;
 import net.momirealms.customfishing.api.mechanic.hook.HookConfig;
 import net.momirealms.customfishing.api.mechanic.hook.HookManager;
 import net.momirealms.customfishing.api.mechanic.requirement.RequirementManager;
+import net.momirealms.customfishing.api.util.PlayerUtils;
 import net.momirealms.customfishing.bukkit.item.damage.CustomDurabilityItem;
 import net.momirealms.customfishing.bukkit.item.damage.DurabilityItem;
 import net.momirealms.customfishing.bukkit.item.damage.VanillaDurabilityItem;
-import net.momirealms.customfishing.bukkit.util.PlayerUtils;
 import net.momirealms.customfishing.common.helper.AdventureHelper;
 import net.momirealms.customfishing.common.item.Item;
 import org.bukkit.Bukkit;
@@ -73,7 +73,7 @@ public class BukkitHookManager implements HookManager, Listener {
 
     @Override
     public void load() {
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
         plugin.debug("Loaded " + hooks.size() + " hooks");
     }
 
@@ -99,6 +99,7 @@ public class BukkitHookManager implements HookManager, Listener {
         return wrapped.getTag("CustomFishing", "hook_id").map(o -> (String) o);
     }
 
+    @SuppressWarnings("deprecation")
     @EventHandler (ignoreCancelled = true)
     public void onDragDrop(InventoryClickEvent event) {
         final Player player = (Player) event.getWhoClicked();
@@ -137,6 +138,7 @@ public class BukkitHookManager implements HookManager, Listener {
             wrapped.removeTag("CustomFishing", "hook_damage");
             wrapped.removeTag("CustomFishing", "hook_max_damage");
 
+            // unsafe but have to use this
             event.setCursor(itemStack);
 
             List<String> previousLore = wrapped.lore().orElse(new ArrayList<>());

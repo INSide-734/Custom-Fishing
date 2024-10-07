@@ -26,6 +26,7 @@
 package net.momirealms.customfishing.common.dependency;
 
 import net.momirealms.customfishing.common.dependency.relocation.Relocation;
+import net.momirealms.customfishing.common.plugin.CustomFishingProperties;
 import org.jetbrains.annotations.Nullable;
 
 import java.security.MessageDigest;
@@ -134,13 +135,6 @@ public enum Dependency {
             "maven",
             "boosted-yaml",
             Relocation.of("boostedyaml", "dev{}dejvokep{}boostedyaml")
-    ),
-    BYTEBUDDY(
-            "net{}bytebuddy",
-            "byte-buddy",
-            "maven",
-            "byte-buddy",
-            Relocation.of("bytebuddy", "net{}bytebuddy")
     ),
     MARIADB_DRIVER(
             "org{}mariadb{}jdbc",
@@ -307,7 +301,7 @@ public enum Dependency {
     }
 
     public String getVersion() {
-        return DependencyProperties.getDependencyVersion(customArtifactID);
+        return CustomFishingProperties.getValue(customArtifactID);
     }
 
     private static String rewriteEscaping(String s) {

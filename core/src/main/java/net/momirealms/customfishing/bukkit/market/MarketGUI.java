@@ -23,7 +23,7 @@ import net.momirealms.customfishing.api.mechanic.context.ContextKeys;
 import net.momirealms.customfishing.api.mechanic.market.MarketGUIHolder;
 import net.momirealms.customfishing.api.storage.data.EarningData;
 import net.momirealms.customfishing.api.storage.user.UserData;
-import net.momirealms.customfishing.bukkit.util.PlayerUtils;
+import net.momirealms.customfishing.api.util.PlayerUtils;
 import net.momirealms.customfishing.common.helper.AdventureHelper;
 import net.momirealms.customfishing.common.util.Pair;
 import net.momirealms.sparrow.heart.SparrowHeart;
@@ -91,8 +91,8 @@ public class MarketGUI {
     }
 
     public void show() {
-        context.getHolder().openInventory(inventory);
-        SparrowHeart.getInstance().updateInventoryTitle(context.getHolder(), AdventureHelper.componentToJson(AdventureHelper.miniMessage(manager.title.render(context))));
+        context.holder().openInventory(inventory);
+        SparrowHeart.getInstance().updateInventoryTitle(context.holder(), AdventureHelper.componentToJson(AdventureHelper.miniMessage(manager.title.render(context))));
     }
 
     @Nullable
@@ -132,9 +132,9 @@ public class MarketGUI {
 
         MarketDynamicGUIElement sellAllElement = (MarketDynamicGUIElement) getElement(manager.sellAllSlot);
         if (sellAllElement != null && !sellAllElement.getSlots().isEmpty()) {
-            List<ItemStack> itemStacksToSell = manager.storageContentsToList(context.getHolder().getInventory().getStorageContents());
+            List<ItemStack> itemStacksToSell = manager.storageContentsToList(context.holder().getInventory().getStorageContents());
             if (manager.sellFishingBag) {
-                Optional<UserData> optionalUserData = BukkitCustomFishingPlugin.getInstance().getStorageManager().getOnlineUser(context.getHolder().getUniqueId());
+                Optional<UserData> optionalUserData = BukkitCustomFishingPlugin.getInstance().getStorageManager().getOnlineUser(context.holder().getUniqueId());
                 optionalUserData.ifPresent(userData -> itemStacksToSell.addAll(manager.storageContentsToList(userData.holder().getInventory().getStorageContents())));
             }
             Pair<Integer, Double> pair = manager.getItemsToSell(context, itemStacksToSell);
@@ -190,7 +190,7 @@ public class MarketGUI {
         for (int slot : itemElement.getSlots()) {
             ItemStack itemStack = inventory.getItem(slot);
             if (itemStack != null && itemStack.getType() != Material.AIR) {
-                PlayerUtils.giveItem(context.getHolder(), itemStack, itemStack.getAmount());
+                PlayerUtils.giveItem(context.holder(), itemStack, itemStack.getAmount());
                 inventory.setItem(slot, new ItemStack(Material.AIR));
             }
         }

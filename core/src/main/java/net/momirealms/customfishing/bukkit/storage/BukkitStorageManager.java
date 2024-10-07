@@ -73,19 +73,18 @@ public class BukkitStorageManager implements StorageManager, Listener {
         this.plugin = plugin;
         this.locked = new HashSet<>();
         this.onlineUserMap = new ConcurrentHashMap<>();
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
     }
 
     @Override
     public void reload() {
         YamlDocument config = plugin.getConfigManager().loadConfig("database.yml");
+        this.serverID = config.getString("unique-server-id", "default");
         try {
-            config.save(new File(plugin.getBoostrap().getDataFolder(), "database.yml"));
+            config.save(new File(plugin.getBootstrap().getDataFolder(), "database.yml"));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        this.serverID = config.getString("unique-server-id", "default");
-
         // Check if storage type has changed and reinitialize if necessary
         StorageType storageType = StorageType.valueOf(config.getString("data-storage-method", "H2"));
         if (storageType != previousType) {
@@ -106,13 +105,14 @@ public class BukkitStorageManager implements StorageManager, Listener {
 
         // Handle Redis configuration
         if (!this.hasRedis && config.getBoolean("Redis.enable", false)) {
-            this.hasRedis = true;
             this.redisManager = new RedisManager(plugin);
             this.redisManager.initialize(config);
+            this.hasRedis = true;
         }
 
         // Disable Redis if it was enabled but is now disabled
         if (this.hasRedis && !config.getBoolean("Redis.enable", false) && this.redisManager != null) {
+            this.hasRedis = false;
             this.redisManager.disable();
             this.redisManager = null;
         }
@@ -143,12 +143,15 @@ public class BukkitStorageManager implements StorageManager, Listener {
     @Override
     public void disable() {
         HandlerList.unregisterAll(this);
-        this.dataSource.updateManyPlayersData(onlineUserMap.values(), true);
-        this.onlineUserMap.clear();
+        if (this.timerSaveTask != null)
+            this.timerSaveTask.cancel();
+        if (this.dataSource != null && !onlineUserMap.isEmpty())
+            this.dataSource.updateManyPlayersData(onlineUserMap.values(), true);
         if (this.dataSource != null)
             this.dataSource.disable();
         if (this.redisManager != null)
             this.redisManager.disable();
+        this.onlineUserMap.clear();
     }
 
     @NotNull
@@ -171,7 +174,7 @@ public class BukkitStorageManager implements StorageManager, Listener {
 
     @Override
     public CompletableFuture<Optional<UserData>> getOfflineUserData(UUID uuid, boolean lock) {
-        CompletableFuture<Optional<PlayerData>> optionalDataFuture = dataSource.getPlayerData(uuid, lock);
+        CompletableFuture<Optional<PlayerData>> optionalDataFuture = dataSource.getPlayerData(uuid, lock, null);
         return optionalDataFuture.thenCompose(optionalUser -> {
             if (optionalUser.isEmpty()) {
                 return CompletableFuture.completedFuture(Optional.empty());
@@ -277,7 +280,7 @@ public class BukkitStorageManager implements StorageManager, Listener {
                 task.cancel();
                 return;
             }
-            redisManager.getPlayerData(uuid, false).thenAccept(optionalData -> {
+            redisManager.getPlayerData(uuid, false, null).thenAccept(optionalData -> {
                 if (optionalData.isPresent()) {
                     addOnlineUser(player, optionalData.get());
                     task.cancel();
@@ -302,7 +305,7 @@ public class BukkitStorageManager implements StorageManager, Listener {
             plugin.getPluginLogger().warn("Tried 3 times getting data for " + uuid + ". Giving up.");
             return;
         }
-        this.dataSource.getPlayerData(uuid, ConfigManager.lockData()).thenAccept(optionalData -> {
+        this.dataSource.getPlayerData(uuid, ConfigManager.lockData(), null).thenAccept(optionalData -> {
             // Data should not be empty
             if (optionalData.isEmpty()) {
                 plugin.getPluginLogger().severe("Unexpected error: Data is null");

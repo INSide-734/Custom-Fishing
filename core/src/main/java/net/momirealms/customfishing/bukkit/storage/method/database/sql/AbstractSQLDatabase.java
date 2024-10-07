@@ -32,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * An abstract base class for SQL database implementations that handle player data storage.
@@ -80,7 +81,7 @@ public abstract class AbstractSQLDatabase extends AbstractStorage {
      * @throws IOException If there is an error reading the schema resource.
      */
     private String[] getSchema(@NotNull String fileName) throws IOException {
-        return replaceSchemaPlaceholder(new String(Objects.requireNonNull(plugin.getBoostrap().getResource("schema/" + fileName + ".sql"))
+        return replaceSchemaPlaceholder(new String(Objects.requireNonNull(plugin.getBootstrap().getResource("schema/" + fileName + ".sql"))
                .readAllBytes(), StandardCharsets.UTF_8)).split(";");
     }
 
@@ -115,46 +116,47 @@ public abstract class AbstractSQLDatabase extends AbstractStorage {
 
     @SuppressWarnings("DuplicatedCode")
     @Override
-    public CompletableFuture<Optional<PlayerData>> getPlayerData(UUID uuid, boolean lock) {
+    public CompletableFuture<Optional<PlayerData>> getPlayerData(UUID uuid, boolean lock, Executor executor) {
         var future = new CompletableFuture<Optional<PlayerData>>();
-        plugin.getScheduler().async().execute(() -> {
-        try (
-            Connection connection = getConnection();
-            PreparedStatement statement = connection.prepareStatement(String.format(SqlConstants.SQL_SELECT_BY_UUID, getTableName("data")))
-        ) {
-            statement.setString(1, uuid.toString());
-            ResultSet rs = statement.executeQuery();
-            if (rs.next()) {
-                final Blob blob = rs.getBlob("data");
-                final byte[] dataByteArray = blob.getBytes(1, (int) blob.length());
-                blob.free();
-                PlayerData data = plugin.getStorageManager().fromBytes(dataByteArray);
-                data.uuid(uuid);
-                if (lock) {
-                    int lockValue = rs.getInt(2);
-                    if (lockValue != 0 && getCurrentSeconds() - ConfigManager.dataSaveInterval() <= lockValue) {
-                        connection.close();
-                        data.locked(true);
-                        future.complete(Optional.of(data));
-                        plugin.getPluginLogger().warn("Player " + uuid + "'s data is locked. Retrying...");
-                        return;
+        if (executor == null) executor = plugin.getScheduler().async();
+        executor.execute(() -> {
+            try (
+                    Connection connection = getConnection();
+                    PreparedStatement statement = connection.prepareStatement(String.format(SqlConstants.SQL_SELECT_BY_UUID, getTableName("data")))
+            ) {
+                statement.setString(1, uuid.toString());
+                ResultSet rs = statement.executeQuery();
+                if (rs.next()) {
+                    final Blob blob = rs.getBlob("data");
+                    final byte[] dataByteArray = blob.getBytes(1, (int) blob.length());
+                    blob.free();
+                    PlayerData data = plugin.getStorageManager().fromBytes(dataByteArray);
+                    data.uuid(uuid);
+                    if (lock) {
+                        int lockValue = rs.getInt(2);
+                        if (lockValue != 0 && getCurrentSeconds() - 30 <= lockValue) {
+                            connection.close();
+                            data.locked(true);
+                            future.complete(Optional.of(data));
+                            plugin.getPluginLogger().warn("Player " + uuid + "'s data is locked. Retrying...");
+                            return;
+                        }
                     }
+                    if (lock) lockOrUnlockPlayerData(uuid, true);
+                    future.complete(Optional.of(data));
+                } else if (Bukkit.getPlayer(uuid) != null) {
+                    // the player is online
+                    var data = PlayerData.empty();
+                    data.uuid(uuid);
+                    insertPlayerData(uuid, data, lock, connection);
+                    future.complete(Optional.of(data));
+                } else {
+                    future.complete(Optional.empty());
                 }
-                if (lock) lockOrUnlockPlayerData(uuid, true);
-                future.complete(Optional.of(data));
-            } else if (Bukkit.getPlayer(uuid) != null) {
-                // the player is online
-                var data = PlayerData.empty();
-                data.uuid(uuid);
-                insertPlayerData(uuid, data, lock, connection);
-                future.complete(Optional.of(data));
-            } else {
-                future.complete(Optional.empty());
+            } catch (SQLException e) {
+                plugin.getPluginLogger().warn("Failed to get " + uuid + "'s data.", e);
+                future.completeExceptionally(e);
             }
-        } catch (SQLException e) {
-            plugin.getPluginLogger().warn("Failed to get " + uuid + "'s data.", e);
-            future.completeExceptionally(e);
-        }
         });
         return future;
     }

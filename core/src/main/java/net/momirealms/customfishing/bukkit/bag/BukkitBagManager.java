@@ -31,8 +31,8 @@ import net.momirealms.customfishing.api.mechanic.requirement.Requirement;
 import net.momirealms.customfishing.api.mechanic.requirement.RequirementManager;
 import net.momirealms.customfishing.api.storage.user.UserData;
 import net.momirealms.customfishing.api.util.EventUtils;
+import net.momirealms.customfishing.api.util.PlayerUtils;
 import net.momirealms.customfishing.bukkit.config.BukkitConfigManager;
-import net.momirealms.customfishing.bukkit.util.PlayerUtils;
 import net.momirealms.customfishing.common.helper.AdventureHelper;
 import net.momirealms.sparrow.heart.SparrowHeart;
 import org.bukkit.Bukkit;
@@ -78,7 +78,7 @@ public class BukkitBagManager implements BagManager, Listener {
     @Override
     public void load() {
         this.loadConfig();
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
     }
 
     @Override
@@ -90,7 +90,9 @@ public class BukkitBagManager implements BagManager, Listener {
     @Override
     public void disable() {
         unload();
-        this.plugin.getStorageManager().getDataSource().updateManyPlayersData(tempEditMap.values(), true);
+        if (!tempEditMap.isEmpty()) {
+            this.plugin.getStorageManager().getDataSource().updateManyPlayersData(tempEditMap.values(), true);
+        }
     }
 
     @EventHandler

@@ -41,6 +41,8 @@ public class ContextKeys<T> {
     public static final ContextKeys<String> NICK = of("nick", String.class);
     public static final ContextKeys<Boolean> OPEN_WATER = of("open_water", Boolean.class);
     public static final ContextKeys<Float> SIZE = of("size", Float.class);
+    public static final ContextKeys<Double> SIZE_MULTIPLIER = of("size_multiplier", Double.class);
+    public static final ContextKeys<Double> SIZE_ADDER = of("size_adder", Double.class);
     public static final ContextKeys<String> SIZE_FORMATTED = of("size_formatted", String.class);
     public static final ContextKeys<Double> PRICE = of("price", Double.class);
     public static final ContextKeys<String> PRICE_FORMATTED = of("price_formatted", String.class);
@@ -81,6 +83,8 @@ public class ContextKeys<T> {
     public static final ContextKeys<Integer> CLICKS_LEFT = of("left_clicks", Integer.class);
     public static final ContextKeys<Integer> REQUIRED_TIMES = of("clicks", Integer.class);
     public static final ContextKeys<EquipmentSlot> SLOT = of("hand", EquipmentSlot.class);
+    public static final ContextKeys<Double> BONUS = of("bonus", Double.class);
+    public static final ContextKeys<Double> BASE = of("base", Double.class);
 
     private final String key;
     private final Class<T> type;

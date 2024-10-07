@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 public class WorldGuardRegion {
 
     public static void register() {
-        BukkitCustomFishingPlugin.getInstance().getRequirementManager().registerRequirement("region", (args, notSatisfiedActions, runActions) -> {
+        BukkitCustomFishingPlugin.getInstance().getRequirementManager().registerRequirement((args, notSatisfiedActions, runActions) -> {
             HashSet<String> regions = new HashSet<>();
             boolean other;
             int mode = 1;
@@ -57,16 +57,16 @@ public class WorldGuardRegion {
                     }
                 } else {
                     BukkitCustomFishingPlugin.getInstance().getPluginLogger().warn("Invalid value type: " + args.getClass().getSimpleName() + " found at region requirement which is expected be `Section` or `StringList`");
-                    return EmptyRequirement.INSTANCE;
+                    return EmptyRequirement.instance();
                 }
             }
             int finalMode = mode;
             return context -> {
                 Location location;
                 if (other) {
-                    location = Optional.ofNullable(context.arg(ContextKeys.OTHER_LOCATION)).orElse(context.getHolder().getLocation());
+                    location = Optional.ofNullable(context.arg(ContextKeys.OTHER_LOCATION)).orElse(context.holder().getLocation());
                 } else {
-                    location = context.getHolder().getLocation();
+                    location = context.holder().getLocation();
                 }
                 RegionManager regionManager = WorldGuard.getInstance().getPlatform().getRegionContainer().get(BukkitAdapter.adapt(location.getWorld()));
                 if (regionManager != null) {
@@ -92,6 +92,6 @@ public class WorldGuardRegion {
                 if (runActions) ActionManager.trigger(context, notSatisfiedActions);
                 return false;
             };
-        });
+        }, "region");
     }
 }

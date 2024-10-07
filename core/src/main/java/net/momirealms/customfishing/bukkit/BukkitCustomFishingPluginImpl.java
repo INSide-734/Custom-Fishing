@@ -21,7 +21,9 @@ import net.momirealms.customfishing.api.BukkitCustomFishingPlugin;
 import net.momirealms.customfishing.api.event.CustomFishingReloadEvent;
 import net.momirealms.customfishing.api.mechanic.MechanicType;
 import net.momirealms.customfishing.api.mechanic.config.ConfigManager;
+import net.momirealms.customfishing.api.mechanic.context.Context;
 import net.momirealms.customfishing.api.mechanic.misc.cooldown.CoolDownManager;
+import net.momirealms.customfishing.api.mechanic.misc.hologram.HologramManager;
 import net.momirealms.customfishing.api.mechanic.misc.placeholder.BukkitPlaceholderManager;
 import net.momirealms.customfishing.api.util.EventUtils;
 import net.momirealms.customfishing.bukkit.action.BukkitActionManager;
@@ -65,20 +67,26 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
 
     private final ClassPathAppender classPathAppender;
     private final PluginLogger logger;
     private BukkitCommandManager commandManager;
-    private Consumer<Object> debugger;
+    private Consumer<Supplier<String>> debugger = (supplier -> {});
+    private String buildByBit = "%%__BUILTBYBIT__%%";
+    private String polymart = "%%__POLYMART__%%";
+    private String time = "%%__TIMESTAMP__%%";
+    private String user = "%%__USER__%%";
+    private String username = "%%__USERNAME__%%";
 
-    public BukkitCustomFishingPluginImpl(Plugin boostrap) {
-        super(boostrap);
+    public BukkitCustomFishingPluginImpl(Plugin bootstrap) {
+        super(bootstrap);
         VersionHelper.init(getServerVersion());
         this.scheduler = new BukkitSchedulerAdapter(this);
         this.classPathAppender = new ReflectionClassPathAppender(this);
-        this.logger = new JavaPluginLogger(getBoostrap().getLogger());
+        this.logger = new JavaPluginLogger(getBootstrap().getLogger());
         this.dependencyManager = new DependencyManagerImpl(this);
     }
 
@@ -132,15 +140,31 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
         this.translationManager = new TranslationManager(this);
         this.integrationManager = new BukkitIntegrationManager(this);
         this.gameManager = new BukkitGameManager(this);
+        this.hologramManager = new HologramManager(this);
         this.commandManager = new BukkitCommandManager(this);
         this.commandManager.registerDefaultFeatures();
 
         this.reload();
-        if (ConfigManager.metrics()) new Metrics((JavaPlugin) getBoostrap(), 16648);
+        if (ConfigManager.metrics()) new Metrics((JavaPlugin) getBootstrap(), 16648);
+
+        boolean downloadFromPolymart = polymart.equals("1");
+        boolean downloadFromBBB = buildByBit.equals("true");
+
         if (ConfigManager.checkUpdate()) {
             VersionHelper.UPDATE_CHECKER.apply(this).thenAccept(result -> {
-                if (!result) this.getPluginLogger().info("You are using the latest version.");
-                else this.getPluginLogger().warn("Update is available: https://polymart.org/resource/2723");
+                String link;
+                if (downloadFromPolymart) {
+                    link = "https://polymart.org/resource/2723/";
+                } else if (downloadFromBBB) {
+                    link = "https://builtbybit.com/resources/36361/";
+                } else {
+                    link = "https://github.com/Xiao-MoMi/Custom-Fishing/";
+                }
+                if (!result) {
+                    this.getPluginLogger().info("You are using the latest version.");
+                } else {
+                    this.getPluginLogger().warn("Update is available: " + link);
+                }
             });
         }
     }
@@ -167,7 +191,7 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
         this.placeholderManager.reload();
         this.configManager.reload();
         // after ConfigManager
-        this.debugger = ConfigManager.debug() ? (s) -> logger.info("[DEBUG] " + s.toString()) : (s) -> {};
+        this.debugger = ConfigManager.debug() ? (s) -> logger.info("[DEBUG] " + s.get()) : (s) -> {};
 
         this.coolDownManager.reload();
         this.translationManager.reload();
@@ -176,6 +200,7 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
         this.bagManager.reload();
         this.storageManager.reload();
         this.fishingManager.reload();
+        this.hologramManager.reload();
 
         this.itemManager.load();
         this.eventManager.load();
@@ -210,12 +235,13 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
         this.bagManager.disable();
         this.integrationManager.disable();
         this.storageManager.disable();
+        this.hologramManager.disable();
         this.commandManager.unregisterFeatures();
     }
 
     @Override
     public InputStream getResourceStream(String filePath) {
-        return getBoostrap().getResource(filePath);
+        return getBootstrap().getResource(filePath.replace("\\", "/"));
     }
 
     @Override
@@ -230,7 +256,7 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
 
     @Override
     public Path getDataDirectory() {
-        return getBoostrap().getDataFolder().toPath().toAbsolutePath();
+        return getBootstrap().getDataFolder().toPath().toAbsolutePath();
     }
 
     @Override
@@ -241,11 +267,16 @@ public class BukkitCustomFishingPluginImpl extends BukkitCustomFishingPlugin {
     @SuppressWarnings("deprecation")
     @Override
     public String getPluginVersion() {
-        return getBoostrap().getDescription().getVersion();
+        return getBootstrap().getDescription().getVersion();
     }
 
     @Override
     public void debug(Object message) {
-        this.debugger.accept(message);
+        this.debugger.accept(message::toString);
+    }
+
+    @Override
+    public void debug(Supplier<String> messageSupplier) {
+        this.debugger.accept(messageSupplier);
     }
 }

@@ -1,5 +1,3 @@
-val commitID: String by project
-
 plugins {
     id("io.github.goooler.shadow") version "8.1.8"
 }
@@ -7,6 +5,10 @@ plugins {
 repositories {
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/") // papi
     maven("https://libraries.minecraft.net") // brigadier
+    maven("https://jitpack.io/") // sparrow-heart, rtag
+    maven("https://papermc.io/repo/repository/maven-public/") // paper
+    maven("https://oss.sonatype.org/content/repositories/snapshots")
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/") // spigot
 }
 
 dependencies {
@@ -58,25 +60,24 @@ dependencies {
 
 tasks {
     shadowJar {
-        archiveFileName = "CustomFishing-${rootProject.properties["project_version"]}-${commitID}.jar"
+        archiveFileName = "CustomFishing-${rootProject.properties["project_version"]}.jar"
         destinationDirectory.set(file("$rootDir/target"))
         relocate("net.kyori", "net.momirealms.customfishing.libraries")
         relocate("org.incendo", "net.momirealms.customfishing.libraries")
         relocate("dev.dejvokep", "net.momirealms.customfishing.libraries")
-        relocate ("org.apache.commons.pool2", "net.momirealms.customfishing.libraries.commonspool2")
-        relocate ("com.mysql", "net.momirealms.customfishing.libraries.mysql")
-        relocate ("org.mariadb", "net.momirealms.customfishing.libraries.mariadb")
-        relocate ("com.zaxxer.hikari", "net.momirealms.customfishing.libraries.hikari")
-        relocate ("com.mongodb", "net.momirealms.customfishing.libraries.mongodb")
-        relocate ("org.bson", "net.momirealms.customfishing.libraries.bson")
-        relocate ("org.bstats", "net.momirealms.customfishing.libraries.bstats")
-        relocate ("com.github.benmanes.caffeine", "net.momirealms.customfishing.libraries.caffeine")
-        relocate ("net.momirealms.sparrow.heart", "net.momirealms.customfishing.bukkit.nms")
-        relocate ("com.saicone.rtag", "net.momirealms.customfishing.libraries.rtag")
-        relocate ("xyz.xenondevs", "net.momirealms.customfishing.libraries")
-        relocate ("net.objecthunter.exp4j", "net.momirealms.customfishing.libraries.exp4j")
-        relocate ("net.jpountz", "net.momirealms.customfishing.libraries.jpountz") //lz4
-        relocate ("redis.clients.jedis", "net.momirealms.customfishing.libraries.jedis")
+        relocate("org.apache.commons.pool2", "net.momirealms.customfishing.libraries.commonspool2")
+        relocate("com.mysql", "net.momirealms.customfishing.libraries.mysql")
+        relocate("org.mariadb", "net.momirealms.customfishing.libraries.mariadb")
+        relocate("com.zaxxer.hikari", "net.momirealms.customfishing.libraries.hikari")
+        relocate("com.mongodb", "net.momirealms.customfishing.libraries.mongodb")
+        relocate("org.bson", "net.momirealms.customfishing.libraries.bson")
+        relocate("org.bstats", "net.momirealms.customfishing.libraries.bstats")
+        relocate("com.github.benmanes.caffeine", "net.momirealms.customfishing.libraries.caffeine")
+        relocate("net.momirealms.sparrow.heart", "net.momirealms.customfishing.bukkit.nms")
+        relocate("com.saicone.rtag", "net.momirealms.customfishing.libraries.rtag")
+        relocate("net.objecthunter.exp4j", "net.momirealms.customfishing.libraries.exp4j")
+        relocate("net.jpountz", "net.momirealms.customfishing.libraries.jpountz") //lz4
+        relocate("redis.clients.jedis", "net.momirealms.customfishing.libraries.jedis")
     }
 }
 

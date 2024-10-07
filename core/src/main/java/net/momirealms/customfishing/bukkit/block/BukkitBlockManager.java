@@ -26,7 +26,7 @@ import net.momirealms.customfishing.api.mechanic.config.ConfigManager;
 import net.momirealms.customfishing.api.mechanic.context.Context;
 import net.momirealms.customfishing.api.mechanic.context.ContextKeys;
 import net.momirealms.customfishing.api.mechanic.misc.value.MathValue;
-import net.momirealms.customfishing.common.util.Pair;
+import net.momirealms.customfishing.common.helper.VersionHelper;
 import net.momirealms.customfishing.common.util.RandomUtils;
 import net.momirealms.customfishing.common.util.Tuple;
 import org.bukkit.*;
@@ -75,7 +75,16 @@ public class BukkitBlockManager implements BlockManager, Listener {
             }
             @Override
             public BlockData blockData(@NotNull Context<Player> context, @NotNull String id, List<BlockDataModifier> modifiers) {
-                BlockData blockData = Material.valueOf(id.toUpperCase(Locale.ENGLISH)).createBlockData();
+                Material material;
+                try {
+                    material = Material.valueOf(id.toUpperCase(Locale.ENGLISH));
+                } catch (IllegalArgumentException e) {
+                    material = Registry.MATERIAL.get(new NamespacedKey("minecraft", id.toLowerCase(Locale.ENGLISH)));
+                }
+                if (material == null) {
+                    throw new IllegalArgumentException("Material " + id + " is not a valid material");
+                }
+                BlockData blockData = material.createBlockData();
                 for (BlockDataModifier modifier : modifiers)
                     modifier.apply(context, blockData);
                 return blockData;
@@ -102,7 +111,7 @@ public class BukkitBlockManager implements BlockManager, Listener {
 
     @Override
     public void load() {
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
         this.resetBlockDetectionOrder();
         for (BlockProvider provider : blockProviders.values()) {
             plugin.debug("Registered BlockProvider: " + provider.identifier());
@@ -150,7 +159,7 @@ public class BukkitBlockManager implements BlockManager, Listener {
 
         // Retrieve a custom string value stored in the entity's persistent data container.
         String temp = event.getEntity().getPersistentDataContainer().get(
-                requireNonNull(NamespacedKey.fromString("block", plugin.getBoostrap())),
+                requireNonNull(NamespacedKey.fromString("block", plugin.getBootstrap())),
                 PersistentDataType.STRING
         );
 
@@ -240,13 +249,18 @@ public class BukkitBlockManager implements BlockManager, Listener {
             blockData = blockProviders.get("vanilla").blockData(context, blockID, config.dataModifier());
         }
         Location hookLocation = requireNonNull(context.arg(ContextKeys.OTHER_LOCATION));
-        Location playerLocation = requireNonNull(context.getHolder()).getLocation();
-        FallingBlock fallingBlock = hookLocation.getWorld().spawn(hookLocation, FallingBlock.class);
-        fallingBlock.setBlockData(blockData);
+        Location playerLocation = requireNonNull(context.holder()).getLocation();
+        FallingBlock fallingBlock;
+        if (VersionHelper.isVersionNewerThan1_20_2()) {
+            fallingBlock = hookLocation.getWorld().spawn(hookLocation, FallingBlock.class);
+            fallingBlock.setBlockData(blockData);
+        } else {
+            fallingBlock = hookLocation.getWorld().spawnFallingBlock(hookLocation, blockData);
+        }
         fallingBlock.getPersistentDataContainer().set(
-                requireNonNull(NamespacedKey.fromString("block", plugin.getBoostrap())),
+                requireNonNull(NamespacedKey.fromString("block", plugin.getBootstrap())),
                 PersistentDataType.STRING,
-                id + ";" + context.getHolder().getName()
+                id + ";" + context.holder().getName()
         );
         double d0 = playerLocation.getX() - hookLocation.getX();
         double d1 = playerLocation.getY() - hookLocation.getY();
@@ -322,14 +336,13 @@ public class BukkitBlockManager implements BlockManager, Listener {
     private void registerStorage() {
         this.registerBlockStateModifierBuilder("storage", (args) -> {
             if (args instanceof Section section) {
-                List<Tuple<MathValue<Player>, String, Pair<MathValue<Player>, MathValue<Player>>>> contents = new ArrayList<>();
+                List<Tuple<MathValue<Player>, String, MathValue<Player>>> contents = new ArrayList<>();
                 for (Map.Entry<String, Object> entry : section.getStringRouteMappedValues(false).entrySet()) {
                     if (entry.getValue() instanceof Section inner) {
                         String item = inner.getString("item");
-                        String[] split = inner.getString("amount","1~1").split("~");
-                        Pair<MathValue<Player>, MathValue<Player>> amountPair = Pair.of(MathValue.auto(split[0]), MathValue.auto(split[1]));
+                        MathValue<Player> amount = MathValue.auto(inner.getString("amount","1~1"), true);
                         MathValue<Player> chance = MathValue.auto(inner.get("chance", 1d));
-                        contents.add(Tuple.of(chance, item, amountPair));
+                        contents.add(Tuple.of(chance, item, amount));
                     }
                 }
                 return (context, blockState) -> {
@@ -345,7 +358,7 @@ public class BukkitBlockManager implements BlockManager, Listener {
     }
 
     private void setInventoryItems(
-            List<Tuple<MathValue<Player>, String, Pair<MathValue<Player>, MathValue<Player>>>> contents,
+            List<Tuple<MathValue<Player>, String, MathValue<Player>>> contents,
             Context<Player> context,
             Inventory inventory
     ) {
@@ -354,11 +367,11 @@ public class BukkitBlockManager implements BlockManager, Listener {
             unused.add(i);
         }
         Collections.shuffle(unused);
-        for (Tuple<MathValue<Player>, String, Pair<MathValue<Player>, MathValue<Player>>> tuple : contents) {
+        for (Tuple<MathValue<Player>, String, MathValue<Player>> tuple : contents) {
             if (tuple.left().evaluate(context) > Math.random()) {
                 ItemStack itemStack = plugin.getItemManager().buildAny(context, tuple.mid());
                 if (itemStack != null) {
-                    itemStack.setAmount(RandomUtils.generateRandomInt((int) tuple.right().left().evaluate(context), (int) (tuple.right().right().evaluate(context))));
+                    itemStack.setAmount((int) tuple.right().evaluate(context));
                     inventory.setItem(unused.pop(), itemStack);
                 }
             }

@@ -27,6 +27,7 @@ import net.momirealms.customfishing.api.mechanic.context.Context;
 import net.momirealms.customfishing.api.mechanic.context.ContextKeys;
 import net.momirealms.customfishing.api.mechanic.item.CustomFishingItem;
 import net.momirealms.customfishing.api.mechanic.item.ItemManager;
+import net.momirealms.customfishing.api.mechanic.misc.value.TextValue;
 import net.momirealms.customfishing.api.util.EventUtils;
 import net.momirealms.customfishing.bukkit.integration.item.CustomFishingItemProvider;
 import net.momirealms.customfishing.bukkit.item.damage.CustomDurabilityItem;
@@ -63,7 +64,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import static java.util.Objects.requireNonNull;
@@ -83,7 +83,11 @@ public class BukkitItemManager implements ItemManager, Listener {
             @NotNull
             @Override
             public ItemStack buildItem(@NotNull Player player, @NotNull String id) {
-                return new ItemStack(Material.valueOf(id.toUpperCase(Locale.ENGLISH)));
+                try {
+                    return new ItemStack(Material.valueOf(id.toUpperCase(Locale.ENGLISH)));
+                } catch (IllegalArgumentException e) {
+                    return new ItemStack(requireNonNull(Registry.MATERIAL.get(new NamespacedKey("minecraft", id.toLowerCase(Locale.ENGLISH)))));
+                }
             }
             @NotNull
             @Override
@@ -106,7 +110,7 @@ public class BukkitItemManager implements ItemManager, Listener {
 
     @Override
     public void load() {
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
         this.resetItemDetectionOrder();
         for (ItemProvider provider : itemProviders.values()) {
             plugin.debug("Registered ItemProvider: " + provider.identifier());
@@ -134,8 +138,14 @@ public class BukkitItemManager implements ItemManager, Listener {
     @NotNull
     @Override
     public ItemStack build(@NotNull Context<Player> context, @NotNull CustomFishingItem item) {
-        ItemStack itemStack = getOriginalStack(context.getHolder(), item.material());
+        ItemStack itemStack = getOriginalStack(context.holder(), item.material());
         if (itemStack.getType() == Material.AIR) return itemStack;
+        plugin.getLootManager().getLoot(item.id()).ifPresent(loot -> {
+            for (Map.Entry<String, TextValue<Player>> entry : loot.customData().entrySet()) {
+                context.arg(ContextKeys.of("data_" + entry.getKey(), String.class), entry.getValue().render(context));
+            }
+        });
+        itemStack.setAmount(Math.max(1, (int) item.amount().evaluate(context)));
         Item<ItemStack> wrappedItemStack = factory.wrap(itemStack);
         for (BiConsumer<Item<ItemStack>, Context<Player>> consumer : item.tagConsumers()) {
             consumer.accept(wrappedItemStack, context);
@@ -145,7 +155,7 @@ public class BukkitItemManager implements ItemManager, Listener {
 
     @Override
     public ItemStack buildAny(@NotNull Context<Player> context, @NotNull String item) {
-        return getOriginalStack(context.getHolder(), item);
+        return getOriginalStack(context.holder(), item);
     }
 
     @NotNull
@@ -167,22 +177,27 @@ public class BukkitItemManager implements ItemManager, Listener {
         return (String) factory.wrap(itemStack).getTag("CustomFishing", "id").orElse(null);
     }
 
-    @Nullable
     @Override
-    public org.bukkit.entity.Item dropItemLoot(@NotNull Context<Player> context, ItemStack rod, FishHook hook) {
+    public ItemStack getItemLoot(@NotNull Context<Player> context, ItemStack rod, FishHook hook) {
         String id = requireNonNull(context.arg(ContextKeys.ID));
         ItemStack itemStack;
         if (id.equals("vanilla")) {
-            itemStack = SparrowHeart.getInstance().getFishingLoot(context.getHolder(), hook, rod).stream().findAny().orElseThrow(() -> new RuntimeException("new EntityItem would throw if for whatever reason (mostly shitty datapacks) the fishing loot turns out to be empty"));
+            itemStack = SparrowHeart.getInstance().getFishingLoot(context.holder(), hook, rod).stream().findAny().orElseThrow(() -> new RuntimeException("new EntityItem would throw if for whatever reason (mostly shitty datapacks) the fishing loot turns out to be empty"));
         } else {
             itemStack = requireNonNull(buildInternal(context, id));
         }
+        return itemStack;
+    }
 
+    @Nullable
+    @Override
+    public org.bukkit.entity.Item dropItemLoot(@NotNull Context<Player> context, ItemStack rod, FishHook hook) {
+        ItemStack itemStack = getItemLoot(context, rod, hook);
         if (itemStack.getType() == Material.AIR) {
             return null;
         }
 
-        Player player = context.getHolder();
+        Player player = context.holder();
         Location playerLocation = player.getLocation();
         Location hookLocation = requireNonNull(context.arg(ContextKeys.OTHER_LOCATION));
 
@@ -195,10 +210,10 @@ public class BukkitItemManager implements ItemManager, Listener {
 
         itemEntity.setInvulnerable(true);
         // prevent from being killed by lava
-        plugin.getScheduler().asyncLater(() -> {
+        plugin.getScheduler().sync().runLater(() -> {
             if (itemEntity.isValid())
                 itemEntity.setInvulnerable(false);
-        }, 1, TimeUnit.SECONDS);
+        }, 20, hookLocation);
 
         itemEntity.setVelocity(vector);
 
@@ -210,6 +225,10 @@ public class BukkitItemManager implements ItemManager, Listener {
             try {
                 return new ItemStack(Material.valueOf(material.toUpperCase(Locale.ENGLISH)));
             } catch (IllegalArgumentException e) {
+                Material another = Registry.MATERIAL.get(new NamespacedKey("minecraft", material.toLowerCase(Locale.ENGLISH)));
+                if (another != null) {
+                    return new ItemStack(another);
+                }
                 plugin.getPluginLogger().severe("material " + material + " not exists", e);
                 return new ItemStack(Material.PAPER);
             }
@@ -279,6 +298,7 @@ public class BukkitItemManager implements ItemManager, Listener {
         wrapped.load();
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void increaseDamage(Player player, ItemStack itemStack, int amount, boolean incorrectUsage) {
         if (itemStack == null || itemStack.getType() == Material.AIR || itemStack.getAmount() == 0)
@@ -294,6 +314,7 @@ public class BukkitItemManager implements ItemManager, Listener {
             return;
 
         ItemMeta previousMeta = itemStack.getItemMeta().clone();
+        // use event from Spigot for compatibility
         PlayerItemDamageEvent itemDamageEvent = new PlayerItemDamageEvent(player, itemStack, amount);
         if (EventUtils.fireAndCheckCancel(itemDamageEvent)) {
             plugin.debug("Another plugin modified the item from `PlayerItemDamageEvent` called by CustomFishing");
@@ -404,7 +425,7 @@ public class BukkitItemManager implements ItemManager, Listener {
                 PersistentDataContainer pdc = block.getChunk().getPersistentDataContainer();
                 ItemStack cloned = itemStack.clone();
                 cloned.setAmount(1);
-                pdc.set(new NamespacedKey(plugin.getBoostrap(), LocationUtils.toChunkPosString(block.getLocation())), PersistentDataType.STRING, ItemStackUtils.toBase64(cloned));
+                pdc.set(new NamespacedKey(plugin.getBootstrap(), LocationUtils.toChunkPosString(block.getLocation())), PersistentDataType.STRING, ItemStackUtils.toBase64(cloned));
             } else {
                 event.setCancelled(true);
             }
@@ -416,7 +437,7 @@ public class BukkitItemManager implements ItemManager, Listener {
         final Block block = event.getBlock();
         if (block.getState() instanceof Skull) {
             PersistentDataContainer pdc = block.getChunk().getPersistentDataContainer();
-            NamespacedKey key = new NamespacedKey(plugin.getBoostrap(), LocationUtils.toChunkPosString(block.getLocation()));
+            NamespacedKey key = new NamespacedKey(plugin.getBootstrap(), LocationUtils.toChunkPosString(block.getLocation()));
             String base64 = pdc.get(key, PersistentDataType.STRING);
             if (base64 != null) {
                 pdc.remove(key);
@@ -443,7 +464,7 @@ public class BukkitItemManager implements ItemManager, Listener {
         for (Block block : blockList) {
             if (block.getState() instanceof Skull) {
                 PersistentDataContainer pdc = block.getChunk().getPersistentDataContainer();
-                if (pdc.has(new NamespacedKey(plugin.getBoostrap(), LocationUtils.toChunkPosString(block.getLocation())), PersistentDataType.STRING)) {
+                if (pdc.has(new NamespacedKey(plugin.getBootstrap(), LocationUtils.toChunkPosString(block.getLocation())), PersistentDataType.STRING)) {
                     event.setCancelled(true);
                     return;
                 }
@@ -463,7 +484,7 @@ public class BukkitItemManager implements ItemManager, Listener {
 
     @EventHandler (ignoreCancelled = true)
     public void onPickUpItem(EntityPickupItemEvent event) {
-        String owner = event.getItem().getPersistentDataContainer().get(requireNonNull(NamespacedKey.fromString("owner", plugin.getBoostrap())), PersistentDataType.STRING);
+        String owner = event.getItem().getPersistentDataContainer().get(requireNonNull(NamespacedKey.fromString("owner", plugin.getBootstrap())), PersistentDataType.STRING);
         if (owner != null) {
             if (!(event.getEntity() instanceof Player player)) {
                 event.setCancelled(true);
@@ -480,7 +501,7 @@ public class BukkitItemManager implements ItemManager, Listener {
         for (Block block : blocks) {
             if (block.getState() instanceof Skull) {
                 PersistentDataContainer pdc = block.getChunk().getPersistentDataContainer();
-                var nk = new NamespacedKey(plugin.getBoostrap(), LocationUtils.toChunkPosString(block.getLocation()));
+                var nk = new NamespacedKey(plugin.getBootstrap(), LocationUtils.toChunkPosString(block.getLocation()));
                 String base64 = pdc.get(nk, PersistentDataType.STRING);
                 if (base64 != null) {
                     ItemStack itemStack = ItemStackUtils.fromBase64(base64);

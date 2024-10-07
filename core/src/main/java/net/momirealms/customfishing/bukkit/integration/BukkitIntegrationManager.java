@@ -94,6 +94,9 @@ public class BukkitIntegrationManager implements IntegrationManager {
         if (isHooked("NeigeItems")) {
             registerItemProvider(new NeigeItemsItemProvider());
         }
+        if (isHooked("ExecutableItems")) {
+            registerItemProvider(new ExecutableItemProvider());
+        }
         if (isHooked("MythicMobs", "5")) {
             registerItemProvider(new MythicMobsItemProvider());
             registerEntityProvider(new MythicEntityProvider());
@@ -166,6 +169,7 @@ public class BukkitIntegrationManager implements IntegrationManager {
         return false;
     }
 
+    @SuppressWarnings("deprecation")
     private boolean isHooked(String hooked, String... versionPrefix) {
         Plugin p = Bukkit.getPluginManager().getPlugin(hooked);
         if (p != null) {

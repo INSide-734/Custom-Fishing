@@ -86,7 +86,7 @@ public class ItemStackUtils {
         map.remove("id");
         map.put("material", itemStack.getType().name().toLowerCase(Locale.ENGLISH));
         map.put("amount", itemStack.getAmount());
-        Object tag = map.remove("tags");
+        Object tag = map.remove("tag");
         if (tag != null) {
             map.put("nbt", tag);
         }
@@ -105,7 +105,7 @@ public class ItemStackUtils {
         }
     }
 
-    @SuppressWarnings("UnstableApiUsage")
+    @SuppressWarnings({"unchecked", "UnstableApiUsage"})
     public static void sectionToComponentEditor(Section section, List<ItemEditor> itemEditors) {
         for (Map.Entry<String, Object> entry : section.getStringRouteMappedValues(false).entrySet()) {
             String component = entry.getKey();
@@ -272,6 +272,7 @@ public class ItemStackUtils {
     }
 
     // ugly codes, remaining improvements
+    @SuppressWarnings("unchecked")
     public static void sectionToTagEditor(Section section, List<ItemEditor> itemEditors, String... route) {
         for (Map.Entry<String, Object> entry : section.getStringRouteMappedValues(false).entrySet()) {
             Object value = entry.getValue();
@@ -341,7 +342,7 @@ public class ItemStackUtils {
                                     values.add(MathValue.auto(toTypeAndData((String) o).right()));
                                 }
                                 itemEditors.add(((item, context) -> {
-                                    List<Double> doubles = values.stream().map(unparsed -> (double) unparsed.evaluate(context)).toList();
+                                    List<Double> doubles = values.stream().map(unparsed -> unparsed.evaluate(context)).toList();
                                     item.set(doubles, (Object[]) currentRoute);
                                 }));
                             }
@@ -392,7 +393,7 @@ public class ItemStackUtils {
                     case DOUBLE -> {
                         MathValue<Player> mathValue = MathValue.auto(pair.right());
                         itemEditors.add(((item, context) -> {
-                            item.set((double) mathValue.evaluate(context), (Object[]) currentRoute);
+                            item.set(mathValue.evaluate(context), (Object[]) currentRoute);
                         }));
                     }
                     case FLOAT -> {

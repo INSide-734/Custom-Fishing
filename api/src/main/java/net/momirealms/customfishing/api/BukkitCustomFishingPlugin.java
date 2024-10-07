@@ -33,6 +33,7 @@ import net.momirealms.customfishing.api.mechanic.item.ItemManager;
 import net.momirealms.customfishing.api.mechanic.loot.LootManager;
 import net.momirealms.customfishing.api.mechanic.market.MarketManager;
 import net.momirealms.customfishing.api.mechanic.misc.cooldown.CoolDownManager;
+import net.momirealms.customfishing.api.mechanic.misc.hologram.HologramManager;
 import net.momirealms.customfishing.api.mechanic.misc.placeholder.PlaceholderManager;
 import net.momirealms.customfishing.api.mechanic.requirement.RequirementManager;
 import net.momirealms.customfishing.api.mechanic.statistic.StatisticsManager;
@@ -49,6 +50,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
+import java.util.function.Supplier;
 
 /**
  * Abstract class representing the main CustomFishing plugin.
@@ -57,7 +59,7 @@ import java.io.File;
 public abstract class BukkitCustomFishingPlugin implements CustomFishingPlugin {
 
     private static BukkitCustomFishingPlugin instance;
-    private final Plugin boostrap;
+    private final Plugin bootstrap;
 
     protected EventManager eventManager;
     protected ConfigManager configManager;
@@ -84,17 +86,18 @@ public abstract class BukkitCustomFishingPlugin implements CustomFishingPlugin {
     protected TotemManager totemManager;
     protected FishingManager fishingManager;
     protected GameManager gameManager;
+    protected HologramManager hologramManager;
 
     /**
      * Constructs a new BukkitCustomFishingPlugin instance.
      *
-     * @param boostrap the plugin instance used to initialize this class
+     * @param bootstrap the plugin instance used to initialize this class
      */
-    public BukkitCustomFishingPlugin(Plugin boostrap) {
-        if (!boostrap.getName().equals("CustomFishing")) {
+    public BukkitCustomFishingPlugin(Plugin bootstrap) {
+        if (!bootstrap.getName().equals("CustomFishing")) {
             throw new IllegalArgumentException("CustomFishing plugin requires custom fishing plugin");
         }
-        this.boostrap = boostrap;
+        this.bootstrap = bootstrap;
         instance = this;
     }
 
@@ -163,7 +166,7 @@ public abstract class BukkitCustomFishingPlugin implements CustomFishingPlugin {
      * @return the data folder as a {@link File}
      */
     public File getDataFolder() {
-        return boostrap.getDataFolder();
+        return bootstrap.getDataFolder();
     }
 
     /**
@@ -334,8 +337,8 @@ public abstract class BukkitCustomFishingPlugin implements CustomFishingPlugin {
      *
      * @return the {@link Plugin} instance
      */
-    public Plugin getBoostrap() {
-        return boostrap;
+    public Plugin getBootstrap() {
+        return bootstrap;
     }
 
     /**
@@ -359,9 +362,20 @@ public abstract class BukkitCustomFishingPlugin implements CustomFishingPlugin {
     }
 
     /**
+     * Retrieves the HologramManager.
+     *
+     * @return the {@link HologramManager}
+     */
+    public HologramManager getHologramManager() {
+        return hologramManager;
+    }
+
+    /**
      * Logs a debug message.
      *
      * @param message the message to log
      */
     public abstract void debug(Object message);
+
+    public abstract void debug(Supplier<String> messageSupplier);
 }

@@ -104,7 +104,7 @@ public class BukkitMarketManager implements MarketManager, Listener {
     @Override
     public void load() {
         this.loadConfig();
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
         this.resetEarningsTask = plugin.getScheduler().asyncRepeating(() -> {
             int now = getRealTimeDate();
             if (this.cachedDate != now) {
@@ -361,9 +361,9 @@ public class BukkitMarketManager implements MarketManager, Listener {
                     ActionManager.trigger(gui.context, sellDenyActions);
                 }
             } else if (element.getSymbol() == sellAllSlot) {
-                List<ItemStack> itemStacksToSell = storageContentsToList(gui.context.getHolder().getInventory().getStorageContents());
+                List<ItemStack> itemStacksToSell = storageContentsToList(gui.context.holder().getInventory().getStorageContents());
                 if (sellFishingBag) {
-                    Optional<UserData> optionalUserData = BukkitCustomFishingPlugin.getInstance().getStorageManager().getOnlineUser(gui.context.getHolder().getUniqueId());
+                    Optional<UserData> optionalUserData = BukkitCustomFishingPlugin.getInstance().getStorageManager().getOnlineUser(gui.context.holder().getUniqueId());
                     optionalUserData.ifPresent(userData -> itemStacksToSell.addAll(storageContentsToList(userData.holder().getInventory().getStorageContents())));
                 }
                 Pair<Integer, Double> pair = getItemsToSell(gui.context, itemStacksToSell);
@@ -505,6 +505,11 @@ public class BukkitMarketManager implements MarketManager, Listener {
             if (price > 0 && itemStack != null) {
                 if (allowBundle && itemStack.getItemMeta() instanceof BundleMeta bundleMeta) {
                     clearWorthyItems(context, bundleMeta.getItems());
+                    List<ItemStack> newItems = new ArrayList<>(bundleMeta.getItems());
+                    newItems.removeIf(item -> {
+                        return item.getAmount() == 0 || item.getType() == Material.AIR;
+                    });
+                    bundleMeta.setItems(newItems);
                     itemStack.setItemMeta(bundleMeta);
                     continue;
                 }

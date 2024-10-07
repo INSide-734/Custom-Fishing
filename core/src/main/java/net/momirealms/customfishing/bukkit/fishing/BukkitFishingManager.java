@@ -70,7 +70,7 @@ public class BukkitFishingManager implements FishingManager, Listener {
 
     @Override
     public void load() {
-        Bukkit.getPluginManager().registerEvents(this, plugin.getBoostrap());
+        Bukkit.getPluginManager().registerEvents(this, plugin.getBootstrap());
     }
 
     @Override
@@ -193,6 +193,8 @@ public class BukkitFishingManager implements FishingManager, Listener {
         });
     }
 
+    // It's not necessary to get component from the event
+    @SuppressWarnings("deprecation")
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
         if (event.isCancelled()) return;
@@ -245,7 +247,7 @@ public class BukkitFishingManager implements FishingManager, Listener {
         if (hook.isPresent()) {
             Entity entity = event.getCaught();
             if (entity != null && entity.getPersistentDataContainer().get(
-                    Objects.requireNonNull(NamespacedKey.fromString("temp-entity", plugin.getBoostrap())),
+                    Objects.requireNonNull(NamespacedKey.fromString("temp-entity", plugin.getBootstrap())),
                     PersistentDataType.STRING
             ) != null) {
                 event.setCancelled(true);
